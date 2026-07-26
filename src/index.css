@@ -96,12 +96,13 @@ html, body, #root {
 .landing__title {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(3rem, 8vw, 7rem);
+  font-size: clamp(2rem, 5.5vw, 5rem);
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   margin-bottom: 1.5rem;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .landing__char {
