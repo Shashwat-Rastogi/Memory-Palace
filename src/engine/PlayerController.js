@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+const GROUND_Y = 2;
+const GRAVITY = 4;
+
 export default class PlayerController {
   constructor(camera, domElement, scene) {
     this.camera = camera;
@@ -10,8 +13,9 @@ export default class PlayerController {
     
     this.yaw = 0;
     this.pitch = 0;
-    this.position = new THREE.Vector3(0, 2, 0);
+    this.position = new THREE.Vector3(0, GROUND_Y, 0);
     this.camera.position.copy(this.position);
+    this.velocityY = 0;
     
     this.moveSpeed = 4;
     this.sprintMultiplier = 2;
@@ -27,7 +31,7 @@ export default class PlayerController {
       maxX: 9.5,
       minZ: -9.5,
       maxZ: 9.5,
-      minY: 0.5,
+      minY: GROUND_Y,
       maxY: 10
     };
 
@@ -66,6 +70,13 @@ export default class PlayerController {
   onKeyDown(event) {
     if (!this.enabled) return;
     this.keys[event.code] = true;
+
+    // G key: snap to ground level immediately
+    if (event.code === 'KeyG') {
+      this.position.y = GROUND_Y;
+      this.velocityY = 0;
+      this.camera.position.copy(this.position);
+    }
   }
 
   onKeyUp(event) {
@@ -98,7 +109,8 @@ export default class PlayerController {
     return (delta) => {
       if (!this.isLocked || !this.enabled) return;
 
-      const speed = this.moveSpeed * (this.keys['ShiftLeft'] || this.keys['ShiftRight'] ? this.sprintMultiplier : 1) * delta;
+      const isSprinting = this.keys['ShiftLeft'] || this.keys['ShiftRight'];
+      const speed = this.moveSpeed * (isSprinting ? this.sprintMultiplier : 1) * delta;
       
       const forward = new THREE.Vector3(0, 0, -1);
       forward.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
@@ -112,11 +124,33 @@ export default class PlayerController {
       if (this.keys['KeyS']) move.sub(forward);
       if (this.keys['KeyA']) move.sub(right);
       if (this.keys['KeyD']) move.add(right);
-      if (this.keys['Space']) move.y += 1;
-      if (this.keys['ControlLeft'] || this.keys['ControlRight']) move.y -= 1;
+
+      const flyingUp = this.keys['Space'];
+      const flyingDown = this.keys['ControlLeft'] || this.keys['ControlRight'] || this.keys['KeyC'];
+
+      if (flyingUp) {
+        this.velocityY = this.moveSpeed * (isSprinting ? this.sprintMultiplier : 1);
+      } else if (flyingDown) {
+        this.velocityY = -this.moveSpeed * (isSprinting ? this.sprintMultiplier : 1);
+      } else {
+        // Soft gravity: pull down to ground level smoothly if airborne
+        if (this.position.y > GROUND_Y) {
+          this.velocityY = Math.max(-this.moveSpeed, this.velocityY - GRAVITY * delta);
+        } else {
+          this.velocityY = 0;
+        }
+      }
+
+      move.y += this.velocityY * delta;
       
-      if (move.lengthSq() > 0) {
-        move.normalize().multiplyScalar(speed);
+      if (move.lengthSq() > 0 || this.velocityY !== 0) {
+        if (move.x !== 0 || move.z !== 0) {
+          const horizontal = new THREE.Vector3(move.x, 0, move.z);
+          horizontal.normalize().multiplyScalar(speed);
+          move.x = horizontal.x;
+          move.z = horizontal.z;
+        }
+
         const nextPos = this.position.clone().add(move);
         
         let ripplePos = null;
@@ -144,10 +178,10 @@ export default class PlayerController {
         
         if (nextPos.y < this.bounds.minY) {
           nextPos.y = this.bounds.minY;
-          ripplePos = new THREE.Vector3(nextPos.x, this.bounds.minY, nextPos.z);
-          rippleNorm = new THREE.Vector3(0, 1, 0);
+          this.velocityY = 0;
         } else if (nextPos.y > this.bounds.maxY) {
           nextPos.y = this.bounds.maxY;
+          this.velocityY = 0;
           ripplePos = new THREE.Vector3(nextPos.x, this.bounds.maxY, nextPos.z);
           rippleNorm = new THREE.Vector3(0, -1, 0);
         }

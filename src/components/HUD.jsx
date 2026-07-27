@@ -33,6 +33,7 @@ export default function HUD({ markerCount, isEditing, user, onLoginClick, onLogo
         <span className="hud__control-item"><kbd>L-Click</kbd> place node</span>
         <span className="hud__control-item"><kbd>R-Click</kbd> edit node</span>
         <span className="hud__control-item"><kbd>Space</kbd>/<kbd>Ctrl</kbd> fly</span>
+        <span className="hud__control-item"><kbd>G</kbd> land</span>
         <span className="hud__control-item"><kbd>Shift</kbd> sprint</span>
         <span className="hud__control-item"><kbd>Esc</kbd> unlock</span>
       </div>
