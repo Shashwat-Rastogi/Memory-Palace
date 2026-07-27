@@ -19,6 +19,9 @@ export default function PalaceView({ onExit, user, onUserChange }) {
   
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
+  const savePalaceRef = useRef(null);
+  const loadPalaceRef = useRef(null);
+
   const savePalace = useCallback((currentUser) => {
     if (!engineRef.current?.markerSystem || !currentUser) return;
     const markers = engineRef.current.markerSystem.markers.map(m => ({
@@ -34,7 +37,6 @@ export default function PalaceView({ onExit, user, onUserChange }) {
     if (!engineRef.current || !currentUser) return;
     const { markerSystem, audio } = engineRef.current;
     
-    // Clear old proximity sounds
     proximitySoundsRef.current.forEach(sound => sound.dispose());
     proximitySoundsRef.current.clear();
 
@@ -44,12 +46,14 @@ export default function PalaceView({ onExit, user, onUserChange }) {
     markerSystem.loadMarkers(markersData);
     setMarkerCount(markerSystem.markers.length);
 
-    // Create new proximity sounds
     markerSystem.markers.forEach(marker => {
       const proximitySound = audio.createProximitySound();
       proximitySoundsRef.current.set(marker.id, proximitySound);
     });
   }, []);
+
+  savePalaceRef.current = savePalace;
+  loadPalaceRef.current = loadPalace;
 
   const requestLock = useCallback(() => {
     if (isLoginOpen) return;
@@ -129,11 +133,10 @@ export default function PalaceView({ onExit, user, onUserChange }) {
       // Auto-save changes if logged in
       const currentUser = localStorage.getItem('mp_logged_in_user');
       if (currentUser) {
-        savePalace(currentUser);
+        savePalaceRef.current(currentUser);
       } else {
-        // Trigger login modal if user wants to save but is not logged in
-        if (player.isLocked) {
-          player.unlock();
+        if (engineRef.current?.player?.isLocked) {
+          engineRef.current.player.unlock();
         }
         setIsLoginOpen(true);
       }
@@ -159,10 +162,9 @@ export default function PalaceView({ onExit, user, onUserChange }) {
           proximitySoundsRef.current.delete(marker.id);
         }
 
-        // Auto-save changes if logged in
         const currentUser = localStorage.getItem('mp_logged_in_user');
         if (currentUser) {
-          savePalace(currentUser);
+          savePalaceRef.current(currentUser);
         }
       }
       setIsEditing(false);
@@ -178,10 +180,9 @@ export default function PalaceView({ onExit, user, onUserChange }) {
       const proximitySound = audio.createProximitySound();
       proximitySoundsRef.current.set(marker.id, proximitySound);
 
-      // Auto-save changes if logged in
       const currentUser = localStorage.getItem('mp_logged_in_user');
       if (currentUser) {
-        savePalace(currentUser);
+        savePalaceRef.current(currentUser);
       }
 
       return marker;
@@ -219,10 +220,9 @@ export default function PalaceView({ onExit, user, onUserChange }) {
     };
     document.addEventListener('keydown', escHandler, true);
 
-    // Initial load if already logged in
     const initialUser = localStorage.getItem('mp_logged_in_user');
     if (initialUser) {
-      loadPalace(initialUser);
+      loadPalaceRef.current(initialUser);
     }
 
     return () => {
@@ -240,7 +240,7 @@ export default function PalaceView({ onExit, user, onUserChange }) {
 
       engineRef.current = null;
     };
-  }, [savePalace, loadPalace]);
+  }, []);
 
   return (
     <div className="palace">
