@@ -239,10 +239,7 @@ export default class MarkerSystem {
     };
   }
 
-  dispose() {
-    this.domElement.removeEventListener('click', this.onClick);
-    this.domElement.removeEventListener('mousedown', this.onMouseDown);
-    document.removeEventListener('contextmenu', this.onContextMenu);
+  clearAllMarkers() {
     this.markers.forEach(marker => {
       if (marker.label) {
         marker.label.material.map.dispose();
@@ -255,5 +252,71 @@ export default class MarkerSystem {
       this.scene.remove(marker.group);
     });
     this.markers = [];
+  }
+
+  loadMarkers(markersData) {
+    this.clearAllMarkers();
+    if (!markersData) return;
+
+    markersData.forEach(data => {
+      const group = new THREE.Group();
+      
+      const shellGeo = new THREE.IcosahedronGeometry(0.25, 1);
+      const shellMat = new THREE.MeshPhysicalMaterial({
+        color: '#00f5d4',
+        roughness: 0.15,
+        metalness: 0.1,
+        transmission: 0.6,
+        thickness: 0.5,
+        ior: 1.5,
+        iridescence: 1.0,
+        iridescenceIOR: 1.3,
+        transparent: true,
+        opacity: 0.7,
+        emissive: '#00f5d4',
+        emissiveIntensity: 0.2
+      });
+      const shell = new THREE.Mesh(shellGeo, shellMat);
+      group.add(shell);
+
+      const coreGeo = new THREE.SphereGeometry(0.08);
+      const coreMat = new THREE.MeshBasicMaterial({
+        color: '#00f5d4',
+        transparent: true,
+        opacity: 0.9
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      group.add(core);
+
+      const light = new THREE.PointLight('#00f5d4', 2, 5, 2);
+      group.add(light);
+
+      const pos = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+      group.position.copy(pos);
+
+      this.scene.add(group);
+
+      const marker = {
+        id: data.id || (Date.now() + Math.random().toString(36).substring(7)),
+        position: pos,
+        heading: data.heading || '',
+        body: data.body || '',
+        group: group,
+        shell: shell,
+        core: core,
+        light: light,
+        label: null
+      };
+
+      this.markers.push(marker);
+      this.updateMarkerLabel(marker);
+    });
+  }
+
+  dispose() {
+    this.domElement.removeEventListener('click', this.onClick);
+    this.domElement.removeEventListener('mousedown', this.onMouseDown);
+    document.removeEventListener('contextmenu', this.onContextMenu);
+    this.clearAllMarkers();
   }
 }

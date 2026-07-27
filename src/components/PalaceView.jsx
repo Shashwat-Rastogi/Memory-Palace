@@ -6,19 +6,94 @@ import MarkerSystem from '../engine/MarkerSystem.js';
 import HolographicInput from '../engine/HolographicInput.js';
 import AudioEngine from '../engine/AudioEngine.js';
 import HUD from './HUD.jsx';
+import LoginModal from './LoginModal.jsx';
 
 export default function PalaceView({ onExit }) {
   const containerRef = useRef(null);
   const engineRef = useRef(null);
+  const proximitySoundsRef = useRef(new Map());
+
   const [markerCount, setMarkerCount] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  
+  const [user, setUser] = useState(() => localStorage.getItem('mp_logged_in_user') || null);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
+  const savePalace = useCallback((currentUser) => {
+    if (!engineRef.current?.markerSystem || !currentUser) return;
+    const markers = engineRef.current.markerSystem.markers.map(m => ({
+      id: m.id,
+      position: { x: m.position.x, y: m.position.y, z: m.position.z },
+      heading: m.heading,
+      body: m.body
+    }));
+    localStorage.setItem(`mp_palace_${currentUser.toLowerCase()}`, JSON.stringify(markers));
+  }, []);
+
+  const loadPalace = useCallback((currentUser) => {
+    if (!engineRef.current || !currentUser) return;
+    const { markerSystem, audio } = engineRef.current;
+    
+    // Clear old proximity sounds
+    proximitySoundsRef.current.forEach(sound => sound.dispose());
+    proximitySoundsRef.current.clear();
+
+    const dataStr = localStorage.getItem(`mp_palace_${currentUser.toLowerCase()}`);
+    const markersData = dataStr ? JSON.parse(dataStr) : [];
+    
+    markerSystem.loadMarkers(markersData);
+    setMarkerCount(markerSystem.markers.length);
+
+    // Create new proximity sounds
+    markerSystem.markers.forEach(marker => {
+      const proximitySound = audio.createProximitySound();
+      proximitySoundsRef.current.set(marker.id, proximitySound);
+    });
+  }, []);
 
   const requestLock = useCallback(() => {
+    if (isLoginOpen) return;
     if (engineRef.current?.player) {
       engineRef.current.player.lock();
       engineRef.current.audio.start();
     }
+  }, [isLoginOpen]);
+
+  const handleLoginClick = useCallback(() => {
+    if (engineRef.current?.player) {
+      engineRef.current.player.unlock();
+    }
+    setIsLoginOpen(true);
+  }, []);
+
+  const handleLogoutClick = useCallback(() => {
+    localStorage.removeItem('mp_logged_in_user');
+    setUser(null);
+    if (engineRef.current?.markerSystem) {
+      // Clear current display markers
+      engineRef.current.markerSystem.clearAllMarkers();
+      proximitySoundsRef.current.forEach(sound => sound.dispose());
+      proximitySoundsRef.current.clear();
+      setMarkerCount(0);
+    }
+  }, []);
+
+  const handleLoginSuccess = useCallback((username) => {
+    localStorage.setItem('mp_logged_in_user', username);
+    setUser(username);
+    setIsLoginOpen(false);
+    loadPalace(username);
+    // Request lock again after successfully logging in
+    setTimeout(() => {
+      if (engineRef.current?.player) {
+        engineRef.current.player.lock();
+      }
+    }, 100);
+  }, [loadPalace]);
+
+  const handleLoginClose = useCallback(() => {
+    setIsLoginOpen(false);
   }, []);
 
   useEffect(() => {
@@ -36,8 +111,9 @@ export default function PalaceView({ onExit }) {
     markerSystem.setSurfaces(surfaces);
     markerSystem.setHolographicInput(holographicInput);
 
-    const proximitySounds = new Map();
+    engineRef.current = { sceneManager, roomBuilder, player, markerSystem, holographicInput, audio };
 
+    // Set callbacks
     markerSystem.onEditMarker = (marker) => {
       setIsEditing(true);
       player.enabled = false;
@@ -50,6 +126,18 @@ export default function PalaceView({ onExit }) {
       setIsEditing(false);
       player.clearKeys();
       player.enabled = true;
+      
+      // Auto-save changes if logged in
+      const currentUser = localStorage.getItem('mp_logged_in_user');
+      if (currentUser) {
+        savePalace(currentUser);
+      } else {
+        // Trigger login modal if user wants to save but is not logged in
+        if (player.isLocked) {
+          player.unlock();
+        }
+        setIsLoginOpen(true);
+      }
     };
 
     holographicInput.onDelete = (marker) => {
@@ -67,9 +155,15 @@ export default function PalaceView({ onExit }) {
         markerSystem.markers.splice(idx, 1);
         setMarkerCount(markerSystem.markers.length);
 
-        if (proximitySounds.has(marker.id)) {
-          proximitySounds.get(marker.id).dispose();
-          proximitySounds.delete(marker.id);
+        if (proximitySoundsRef.current.has(marker.id)) {
+          proximitySoundsRef.current.get(marker.id).dispose();
+          proximitySoundsRef.current.delete(marker.id);
+        }
+
+        // Auto-save changes if logged in
+        const currentUser = localStorage.getItem('mp_logged_in_user');
+        if (currentUser) {
+          savePalace(currentUser);
         }
       }
       setIsEditing(false);
@@ -83,7 +177,13 @@ export default function PalaceView({ onExit }) {
       setMarkerCount(markerSystem.markers.length);
 
       const proximitySound = audio.createProximitySound();
-      proximitySounds.set(marker.id, proximitySound);
+      proximitySoundsRef.current.set(marker.id, proximitySound);
+
+      // Auto-save changes if logged in
+      const currentUser = localStorage.getItem('mp_logged_in_user');
+      if (currentUser) {
+        savePalace(currentUser);
+      }
 
       return marker;
     };
@@ -93,7 +193,7 @@ export default function PalaceView({ onExit }) {
     sceneManager.addUpdateCallback(markerSystem.getUpdateCallback());
 
     sceneManager.addUpdateCallback(() => {
-      proximitySounds.forEach((sound, id) => {
+      proximitySoundsRef.current.forEach((sound, id) => {
         const marker = markerSystem.markers.find(m => m.id === id);
         if (marker) {
           const dist = sceneManager.camera.position.distanceTo(marker.position);
@@ -120,14 +220,18 @@ export default function PalaceView({ onExit }) {
     };
     document.addEventListener('keydown', escHandler, true);
 
-    engineRef.current = { sceneManager, roomBuilder, player, markerSystem, holographicInput, audio };
+    // Initial load if already logged in
+    const initialUser = localStorage.getItem('mp_logged_in_user');
+    if (initialUser) {
+      loadPalace(initialUser);
+    }
 
     return () => {
       document.removeEventListener('pointerlockchange', lockChangeHandler);
       document.removeEventListener('keydown', escHandler, true);
 
-      proximitySounds.forEach(sound => sound.dispose());
-      proximitySounds.clear();
+      proximitySoundsRef.current.forEach(sound => sound.dispose());
+      proximitySoundsRef.current.clear();
 
       holographicInput.close();
       markerSystem.dispose();
@@ -137,13 +241,21 @@ export default function PalaceView({ onExit }) {
 
       engineRef.current = null;
     };
-  }, []);
+  }, [savePalace, loadPalace]);
 
   return (
     <div className="palace">
       <div ref={containerRef} className="palace__canvas" />
 
-      {isLocked && <HUD markerCount={markerCount} isEditing={isEditing} />}
+      {isLocked && (
+        <HUD 
+          markerCount={markerCount} 
+          isEditing={isEditing} 
+          user={user}
+          onLoginClick={handleLoginClick}
+          onLogoutClick={handleLogoutClick}
+        />
+      )}
 
       {!isLocked && (
         <div className="palace__unlock-overlay" onClick={requestLock}>
@@ -151,6 +263,12 @@ export default function PalaceView({ onExit }) {
           <span className="palace__unlock-sub">Press ESC to release cursor</span>
         </div>
       )}
+
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={handleLoginClose} 
+        onSuccess={handleLoginSuccess}
+      />
     </div>
   );
 }

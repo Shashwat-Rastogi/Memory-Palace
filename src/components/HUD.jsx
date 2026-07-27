@@ -1,13 +1,26 @@
-export default function HUD({ markerCount, isEditing }) {
+export default function HUD({ markerCount, isEditing, user, onLoginClick, onLogoutClick }) {
   return (
     <div className="hud">
       <div className="hud__crosshair">
         <div className="hud__crosshair-dot" />
       </div>
 
-      <div className="hud__marker-count">
-        <div className="hud__marker-icon" />
-        <span>{markerCount} {markerCount === 1 ? 'node' : 'nodes'}</span>
+      <div className="hud__top-bar">
+        <div className="hud__marker-count">
+          <div className="hud__marker-icon" />
+          <span>{markerCount} {markerCount === 1 ? 'node' : 'nodes'}</span>
+        </div>
+
+        <div className="hud__auth-status">
+          {user ? (
+            <div className="hud__user-badge">
+              <span className="hud__user-name">{user.toUpperCase()}</span>
+              <button className="hud__auth-btn logout" onClick={onLogoutClick}>LOGOUT</button>
+            </div>
+          ) : (
+            <button className="hud__auth-btn login" onClick={onLoginClick}>SYNC PROFILE</button>
+          )}
+        </div>
       </div>
 
       {isEditing && (
