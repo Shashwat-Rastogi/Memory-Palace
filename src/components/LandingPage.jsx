@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import LoginModal from './LoginModal.jsx';
 
 const TITLE = 'MEMORY PALACE';
 
-export default function LandingPage({ onEnter }) {
+export default function LandingPage({ onEnter, user, onUserChange }) {
   const [exiting, setExiting] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -87,15 +89,41 @@ export default function LandingPage({ onEnter }) {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Enter') handleEnter();
+      if (e.key === 'Enter' && !isLoginOpen) handleEnter();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exiting]);
+  }, [exiting, isLoginOpen]);
+
+  const handleLoginClick = () => {
+    setIsLoginOpen(true);
+  };
+
+  const handleLogoutClick = () => {
+    localStorage.removeItem('mp_logged_in_user');
+    onUserChange(null);
+  };
+
+  const handleLoginSuccess = (username) => {
+    localStorage.setItem('mp_logged_in_user', username);
+    onUserChange(username);
+    setIsLoginOpen(false);
+  };
 
   return (
     <div className={`landing ${exiting ? 'landing--exiting' : ''}`}>
       <canvas ref={canvasRef} className="landing__canvas" />
+
+      <div className="landing__header">
+        {user ? (
+          <div className="landing__user-badge">
+            <span className="landing__user-name">{user.toUpperCase()}</span>
+            <button className="landing__auth-btn logout" onClick={handleLogoutClick}>Logout</button>
+          </div>
+        ) : (
+          <button className="landing__auth-btn" onClick={handleLoginClick}>Sync Profile</button>
+        )}
+      </div>
 
       <div className="landing__content">
         <div className="landing__label">Method of Loci</div>
@@ -133,6 +161,12 @@ export default function LandingPage({ onEnter }) {
           <span className="landing__enter-arrow">→</span>
         </button>
       </div>
+
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => setIsLoginOpen(false)} 
+        onSuccess={handleLoginSuccess}
+      />
     </div>
   );
 }

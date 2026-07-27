@@ -8,7 +8,7 @@ import AudioEngine from '../engine/AudioEngine.js';
 import HUD from './HUD.jsx';
 import LoginModal from './LoginModal.jsx';
 
-export default function PalaceView({ onExit }) {
+export default function PalaceView({ onExit, user, onUserChange }) {
   const containerRef = useRef(null);
   const engineRef = useRef(null);
   const proximitySoundsRef = useRef(new Map());
@@ -17,7 +17,6 @@ export default function PalaceView({ onExit }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   
-  const [user, setUser] = useState(() => localStorage.getItem('mp_logged_in_user') || null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const savePalace = useCallback((currentUser) => {
@@ -69,7 +68,7 @@ export default function PalaceView({ onExit }) {
 
   const handleLogoutClick = useCallback(() => {
     localStorage.removeItem('mp_logged_in_user');
-    setUser(null);
+    onUserChange(null);
     if (engineRef.current?.markerSystem) {
       // Clear current display markers
       engineRef.current.markerSystem.clearAllMarkers();
@@ -77,11 +76,11 @@ export default function PalaceView({ onExit }) {
       proximitySoundsRef.current.clear();
       setMarkerCount(0);
     }
-  }, []);
+  }, [onUserChange]);
 
   const handleLoginSuccess = useCallback((username) => {
     localStorage.setItem('mp_logged_in_user', username);
-    setUser(username);
+    onUserChange(username);
     setIsLoginOpen(false);
     loadPalace(username);
     // Request lock again after successfully logging in
